@@ -19,84 +19,61 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04]
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
         include-combo:
-          # Need ubuntu 20.04 for this which is not supported anymore
-          # - torch-version: '1.13.1'
-          #   cuda-version: 'cpu'
-          # - torch-version: '1.13.1'
-          #   cuda-version: 'cu117'
-          
-          - torch-version: '2.0.1'
+          - torch-version: '2.4.1'
             cuda-version: 'cpu'
-          - torch-version: '2.0.1'
-            cuda-version: 'cu117'
-          - torch-version: '2.0.1'
-            cuda-version: 'cu118'
-          
-          - torch-version: '2.1.0'
-            cuda-version: 'cpu'
-          - torch-version: '2.1.0'
-            cuda-version: 'cu118'
-          - torch-version: '2.1.0'
-            cuda-version: 'cu121'
+          - torch-version: '2.4.1'
+            cuda-version: 'cu11'
+          - torch-version: '2.4.1'
+            cuda-version: 'cu12'
 
-          - torch-version: '2.4.1'
-            cuda-version: 'cpu'
-          - torch-version: '2.4.1'
-            cuda-version: 'cu118'
-          - torch-version: '2.4.1'
-            cuda-version: 'cu121'
-          - torch-version: '2.4.1'
-            cuda-version: 'cu124'
-          
           - torch-version: '2.5.1'
             cuda-version: 'cpu'
           - torch-version: '2.5.1'
-            cuda-version: 'cu118'
+            cuda-version: 'cu11'
           - torch-version: '2.5.1'
-            cuda-version: 'cu121'
-          - torch-version: '2.5.1'
-            cuda-version: 'cu124'
+            cuda-version: 'cu12'
 
           - torch-version: '2.6.0'
             cuda-version: 'cpu'
           - torch-version: '2.6.0'
-            cuda-version: 'cu118'
+            cuda-version: 'cu11'
           - torch-version: '2.6.0'
-            cuda-version: 'cu124'
-          - torch-version: '2.6.0'
-            cuda-version: 'cu126'
+            cuda-version: 'cu12'
+
+          - torch-version: '2.7.0'
+            cuda-version: 'cpu'
+          - torch-version: '2.7.0'
+            cuda-version: 'cu11'
+          - torch-version: '2.7.0'
+            cuda-version: 'cu12'
+
+          - torch-version: '2.8.0'
+            cuda-version: 'cpu'
+          - torch-version: '2.8.0'
+            cuda-version: 'cu11'
+          - torch-version: '2.8.0'
+            cuda-version: 'cu12'
 
         exclude:
-          # torch 2.0.1 is not available for python 3.12
-          - python-version: '3.12'
-            include-combo: 
-              torch-version: '2.0.1'
+          # torch 2.4.1 is not available for python 3.13
+          - python-version: '3.13'
+            include-combo:
+              torch-version: '2.4.1'
               cuda-version: 'cpu'
-          - python-version: '3.12'
-            include-combo: 
-              torch-version: '2.0.1'
-              cuda-version: 'cu117'
-          - python-version: '3.12'
-            include-combo: 
-              torch-version: '2.0.1'
-              cuda-version: 'cu118'
-
-          # torch 2.1.0 is not available for python 3.12
-          - python-version: '3.12'
-            include-combo: 
-              torch-version: '2.1.0'
-              cuda-version: 'cpu'
-          - python-version: '3.12'
-            include-combo: 
-              torch-version: '2.1.0'
-              cuda-version: 'cu118'
-          - python-version: '3.12'
-            include-combo: 
-              torch-version: '2.1.0'
-              cuda-version: 'cu121'
-
+          - python-version: '3.13'
+            include-combo:
+              torch-version: '2.4.1'
+              cuda-version: 'cu11'
+          - python-version: '3.13'
+            include-combo:
+              torch-version: '2.4.1'
+              cuda-version: 'cu12'
+          # torch 2.8.0 cu11 wheels not available on PyTorch index
+          - include-combo:
+              torch-version: '2.8.0'
+              cuda-version: 'cu11'
 
     steps:
       - name: Free disk space
@@ -104,34 +81,60 @@ jobs:
           df -h
           sudo rm -rf /usr/share/dotnet /usr/share/swift /opt/hostedtoolcache/CodeQL
           df -h
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Upgrade pip
         run: |
           python3 -m pip install --upgrade pip setuptools
+      - name: Resolve CUDA toolkit and PyTorch index versions
+        id: cuda-ver
+        run: |
+          CUDA="${{ matrix.include-combo.cuda-version }}"
+          TORCH_MAJ_MIN=$(echo "${{ matrix.include-combo.torch-version }}" | cut -d. -f1-2)
+          if [[ "$CUDA" == "cu11" ]]; then
+            echo "toolkit=11.8.0" >> $GITHUB_OUTPUT
+            case "$TORCH_MAJ_MIN" in
+              2.7) echo "torch_index=cu118" >> $GITHUB_OUTPUT ;;
+              2.8) echo "torch_index=cu121" >> $GITHUB_OUTPUT ;;
+              *)   echo "torch_index=cu118" >> $GITHUB_OUTPUT ;;
+            esac
+          elif [[ "$CUDA" == "cu12" ]]; then
+            echo "toolkit=12.8.0" >> $GITHUB_OUTPUT
+            case "$TORCH_MAJ_MIN" in
+              2.1) echo "torch_index=cu121" >> $GITHUB_OUTPUT ;;
+              2.4) echo "torch_index=cu124" >> $GITHUB_OUTPUT ;;
+              2.5) echo "torch_index=cu124" >> $GITHUB_OUTPUT ;;
+              2.6) echo "torch_index=cu126" >> $GITHUB_OUTPUT ;;
+              2.7) echo "torch_index=cu126" >> $GITHUB_OUTPUT ;;
+              *)   echo "torch_index=cu128" >> $GITHUB_OUTPUT ;;
+            esac
+          else
+            echo "torch_index=cpu" >> $GITHUB_OUTPUT
+          fi
       - name: Install CUDA ${{ matrix.include-combo.cuda-version }}
         if: ${{ matrix.include-combo.cuda-version != 'cpu' }}
-        run: |
-          .github/workflows/cuda/install.sh "${{ matrix.include-combo.cuda-version }}" "${{ runner.os }}"
+        uses: Jimver/cuda-toolkit@v0.2.30
+        with:
+          cuda: ${{ steps.cuda-ver.outputs.toolkit }}
+          sub-packages: '["nvcc"]'
+          method: "network"
+          log-file-suffix: "${{ matrix.python-version }}-${{ matrix.include-combo.torch-version }}-${{ matrix.include-combo.cuda-version }}.txt"
       - name: Install PyTorch ${{ matrix.include-combo.torch-version }}+${{ matrix.include-combo.cuda-version }}
         run: |
-          python3 -m pip install torch==${{ matrix.include-combo.torch-version }} --extra-index-url https://download.pytorch.org/whl/${{ matrix.include-combo.cuda-version }}
+          python3 -m pip install torch==${{ matrix.include-combo.torch-version }} --extra-index-url https://download.pytorch.org/whl/${{ steps.cuda-ver.outputs.torch_index }}
           python3 -c "import torch; print('PyTorch:', torch.__version__)"
           python3 -c "import torch; print('CUDA:', torch.version.cuda)"
       - id: build-wheel
         name: Build wheel
-        env:
-          TORCHSORT_VERSION_SUFFIX: "+${{ matrix.include-combo.cuda-version }}-torch${{ matrix.include-combo.torch-version }}"
         run: |
-          export PATH=/usr/local/cuda/bin:$PATH
           export FORCE_CUDA=1
-          export TORCH_CUDA_ARCH_LIST="6.0;7.0;7.5;8.0;8.6+PTX"
+          export TORCH_CUDA_ARCH_LIST="6.0;7.0;7.5;8.0;8.6;8.9;9.0+PTX"
           TORCH_VERSION=`echo "pt${{ matrix.include-combo.torch-version }}" | sed "s/..$//" | sed "s/\.//g"`
-          CUDA_VERSION=`echo ${{ matrix.include-combo.cuda-version }}`
-          export TORCHSORT_VERSION_SUFFIX="+$TORCH_VERSION$CUDA_VERSION"
+          CUDA_VERSION="${{ matrix.include-combo.cuda-version }}"
+          export TORCHSORT_VERSION_SUFFIX="+${TORCH_VERSION}${CUDA_VERSION}"
           python3 -m pip install wheel
           python3 setup.py bdist_wheel --dist-dir=dist
           echo "distname=$(ls dist)" >> ${GITHUB_OUTPUT}
