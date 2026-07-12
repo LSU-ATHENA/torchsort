@@ -1,6 +1,9 @@
-# Torchsort
+# [Torchsort](https://github.com/teddykoker/torchsort)
+## [LSU ATHENA Fork for Blackwell Silicon](https://github.com/LSU-ATHENA)
 
-![Tests](https://github.com/teddykoker/torchsort/workflows/Tests/badge.svg)
+This is a fork of the existing torchsort repository with some minor changes to make it compile and run with newer Python (3.12) and PyTorch (2.13) versions as well as work on NVIDIA Blackwell Silicon, such as a 50-series GPU, RTX Pro 5000/6000 or DGX Spark. Beyond this paragraph, the only part of this README that has been changed is the installation instructions. 
+
+---
 
 Fast, differentiable sorting and ranking in PyTorch.
 
@@ -12,57 +15,70 @@ with the isotonic regression solver rewritten as a PyTorch C++ and CUDA
 extension.
 
 ## Install
-
-```bash
-pip install torchsort
+First, you will want a Python ~3.12 environment with [PyTorch ~2.13](https://pytorch.org/get-started/locally/) installed:
+```
+conda create -n torchsort python=3.12 -y
+conda activate torchsort
+pip install ipython
+pip install torch torchvision
 ```
 
-To build the CUDA extension you will need the CUDA toolchain installed. If you
-want to build in an environment without a CUDA runtime (e.g. docker), you will
-need to export the environment variable
-`TORCH_CUDA_ARCH_LIST` before installing.
+We first install ipython to probe if PyTorch can access the GPU:
+```
+ipython
+import torch as t
+t.cuda.is_available()
+```
+If this returns back `True`, we're good; if `False`, you need to toy around with torch/cuda versions until it works for your GPU. The difficulty of this will depend on the specifications of your system - OS, Hardware, Driver, etc.
 
-<details>
-<summary><strong>Conda / Source Installation</strong></summary>
-If you are building from source in conda (especially with newer PyTorch/CUDA),
-prefer building against the active environment (disable build isolation):
-
-1. Ensure your environment has a CUDA compiler (`nvcc`) available.
-  - For conda: `conda install -c nvidia cuda-nvcc`
-2. Optional: explicitly set the target architectures.
-  - Blackwell (RTX 50xx): `export TORCH_CUDA_ARCH_LIST="12.0"`
-  - Multi-arch example: `export TORCH_CUDA_ARCH_LIST="8.9;9.0;12.0"`
-3. Build/install from source:
-  - `pip install -v --no-build-isolation --no-deps --force-reinstall .`
-
-If `nvcc` is missing, `torchsort` will build CPU-only and CUDA ops will raise an
-import error at runtime.
-
-Thanks to @levnikmyskin, @sachit-menon for pointing this out!
-</details>
-
-### Pre-built Wheels
-
-Pre-built wheels are currently available on Linux for recent Python/PyTorch/CUDA combinations:
-
-```bash
-# torchsort version, supports >= 0.1.10
-export TORCHSORT=0.1.10
-# PyTorch version, supports pt26, pt25, pt24, pt21, pt20, and pt113 for versions
-# 2.6, 2.5, 2.4, 2.1, 2.0, and 1.13 respectively
-export TORCH=pt26
-# CUDA version, supports cpu, cu113, cu117, cu118, cu121, cu124, and cu126 for
-# CPU-only, CUDA 11.3, CUDA 11.7, CUDA 11.8, CUDA 12.1, CUDA 12.4, and CUDA 12.6
-# respectively
-export CUDA=cu126
-# Python version, supports cp310, cp311, and cp312 for versions 3.10, 3.11, and
-# 3.12 respectively
-export PYTHON=cp312
-
-pip install https://github.com/teddykoker/torchsort/releases/download/v${TORCHSORT}/torchsort-${TORCHSORT}+${TORCH}${CUDA}-${PYTHON}-${PYTHON}-linux_x86_64.whl
+Second, you will need to install `nvcc`. This is NVIDIA's compiler for CUDA. It it crucial for compiling and running torchsort.
+```
+conda install -y -c nvidia cuda-nvcc=13.0
+```
+**Note**: My system is running CUDA 13.0 per `nvidia-smi` which is why I specified it as much. You will likely be running 12.8 - 13.2 give or take, especially for Blackwell. If running Blackwell, set this environment variable:
+```
+export TORCH_CUDA_ARCH_LIST="12.0"
 ```
 
-Thanks to [siddharthab](https://github.com/siddharthab) for the help creating the build action! See the [latest release](https://github.com/teddykoker/torchsort/releases/latest) for a list of supported combinations in *Assets*.
+You will then identify where nvcc is installed on your environment:
+```
+which nvcc
+```
+On my system, this outputs `/home/kgmills/miniconda3/autobuild/bin/nvcc`. Given this, we now want to set an environment variable to *tell* torchsort where to find `nvcc`.
+```
+export CUDA_HOME='/home/kgmills/miniconda3/envs/autobuild/'
+```
+**Note**: I removed `bin/nvcc` from the export. 
+
+
+Third, you will want to clone this repo **as a standalone directory that is not nestled with another repo**. E.g., if you are cloning this to get `torchsort` for [`AutoBuild`](https://github.com/Ascend-Research/AutoBuild), you should **not** nestle this repo within a cloned `AutoBuild` repo. 
+
+```
+git clone https://github.com/LSU-ATHENA/torchsort.git
+cd torchsort
+pip install -v -e . --no-build-isolation --no-deps
+```
+
+This should be all that's needed - if you encounter other issues, no-a-days we have Codex and Claude to decipher such issues and help. 
+
+If the package compiles and installs successfully, you can additionally confirm using ipython:
+
+```
+import torch as t
+import torchsort
+x = t.tensor([[3., 1., 2.]], requires_grad=True)
+if t.cuda.is_available():
+  x = x.cuda()
+else:
+  print("Torch does not have access to CUDA!")
+
+y = torchsort.soft_rank(x, regularization_strength=1.0)
+(y.sum()).backward()
+print("soft_rank ok:", y)
+print("grad ok:", x.grad)
+```
+
+This may throw some warnings at you but ultimately what is important is that it does not fail. If its good, we've installed `torchsort` for Blackwell!
 
 ## Usage
 

@@ -35,7 +35,9 @@ def cuda_toolkit_available():
             )
         return False
 
-    return call([nvcc], stdout=DEVNULL, stderr=DEVNULL) == 0
+    # `nvcc` without arguments may return a non-zero exit code on some CUDA
+    # toolkits even when installed correctly. Probe with `--version` instead.
+    return call([nvcc, "--version"], stdout=DEVNULL, stderr=DEVNULL) == 0
 
 
 def compile_args():
