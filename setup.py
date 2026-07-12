@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import shutil
 import sys
 from functools import lru_cache
 from subprocess import DEVNULL, call
@@ -12,12 +13,29 @@ from torch.utils import cpp_extension
 
 @lru_cache(None)
 def cuda_toolkit_available():
-    # https://github.com/idiap/fast-transformers/blob/master/setup.py
-    try:
-        call(["nvcc"], stdout=DEVNULL, stderr=DEVNULL)
-        return True
-    except FileNotFoundError:
+    """Return whether a CUDA toolkit with nvcc is available for extension builds."""
+    nvcc = shutil.which("nvcc")
+    if nvcc is None and cpp_extension.CUDA_HOME:
+        candidate = os.path.join(cpp_extension.CUDA_HOME, "bin", "nvcc")
+        if os.path.isfile(candidate):
+            nvcc = candidate
+
+    if nvcc is None:
+        if os.getenv("TORCHSORT_FORCE_CUDA") == "1" or os.getenv("FORCE_CUDA") == "1":
+            raise RuntimeError(
+                "CUDA build was forced, but nvcc was not found. "
+                "Install a CUDA toolkit with nvcc and set CUDA_HOME accordingly."
+            )
+        # torch.cuda.is_available() only indicates runtime availability; compiling
+        # custom CUDA extensions still requires nvcc.
+        if torch.cuda.is_available():
+            print(
+                "[torchsort] CUDA runtime is available but nvcc was not found; "
+                "building CPU-only extension."
+            )
         return False
+
+    return call([nvcc], stdout=DEVNULL, stderr=DEVNULL) == 0
 
 
 def compile_args():
@@ -36,41 +54,25 @@ def ext_modules():
         ),
     ]
     if cuda_toolkit_available():
+        if "TORCH_CUDA_ARCH_LIST" not in os.environ and torch.cuda.is_available():
+            major, minor = torch.cuda.get_device_capability()
+            os.environ["TORCH_CUDA_ARCH_LIST"] = f"{major}.{minor}"
         extensions.append(
             cpp_extension.CUDAExtension(
                 "torchsort.isotonic_cuda",
                 sources=["torchsort/isotonic_cuda.cu"],
+                extra_compile_args={
+                    "cxx": compile_args(),
+                    "nvcc": ["-O3", "--use_fast_math"],
+                },
             ),
         )
     return extensions
 
-
-with open("README.md") as f:
-    long_description = f.read()
-
-
 setup(
     name="torchsort",
     version="0.1.10" + os.getenv("TORCHSORT_VERSION_SUFFIX", ""),
-    description="Differentiable sorting and ranking in PyTorch",
-    author="Teddy Koker",
-    url="https://github.com/teddykoker/torchsort",
-    license="Apache",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
     packages=["torchsort"],
-    classifiers=[
-        "Programming Language :: Python :: 3",
-    ],
-    install_requires=["torch"],
-    python_requires=">=3.7",
-    extras_require={
-        "testing": [
-            "pytest",
-            # "torch",
-            "fast_soft_sort @ git+https://github.com/google-research/fast-soft-sort.git@6a52ce79869ab16e1e0f39149a84f50f8ad648c5",
-        ],
-    },
     ext_modules=ext_modules(),
     cmdclass={"build_ext": cpp_extension.BuildExtension},
     include_package_data=True,

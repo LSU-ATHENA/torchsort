@@ -20,17 +20,23 @@ pip install torchsort
 To build the CUDA extension you will need the CUDA toolchain installed. If you
 want to build in an environment without a CUDA runtime (e.g. docker), you will
 need to export the environment variable
-`TORCH_CUDA_ARCH_LIST="Pascal;Volta;Turing;Ampere"` before installing.
+`TORCH_CUDA_ARCH_LIST` before installing.
 
 <details>
-<summary><strong>Conda Installation</strong></summary>
-On some systems the package my not compile with `pip` install in conda
-environments. If this happens you may need to:
-    
- 1. Install g++ with `conda install -c conda-forge gxx_linux-64=9.40`
- 2. Run `export CXX=/path/to/miniconda3/envs/env_name/bin/x86_64-conda_cos6-linux-gnu-g++`
- 3. Run `export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/miniconda3/lib`
- 4. `pip install --force-reinstall --no-cache-dir --no-deps torchsort`
+<summary><strong>Conda / Source Installation</strong></summary>
+If you are building from source in conda (especially with newer PyTorch/CUDA),
+prefer building against the active environment (disable build isolation):
+
+1. Ensure your environment has a CUDA compiler (`nvcc`) available.
+  - For conda: `conda install -c nvidia cuda-nvcc`
+2. Optional: explicitly set the target architectures.
+  - Blackwell (RTX 50xx): `export TORCH_CUDA_ARCH_LIST="12.0"`
+  - Multi-arch example: `export TORCH_CUDA_ARCH_LIST="8.9;9.0;12.0"`
+3. Build/install from source:
+  - `pip install -v --no-build-isolation --no-deps --force-reinstall .`
+
+If `nvcc` is missing, `torchsort` will build CPU-only and CUDA ops will raise an
+import error at runtime.
 
 Thanks to @levnikmyskin, @sachit-menon for pointing this out!
 </details>
